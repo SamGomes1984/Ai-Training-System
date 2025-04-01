@@ -1,59 +1,39 @@
-import streamlit as st
+import gradio as gr
 from transformers import AutoModelForCausalLM, AutoTokenizer
-from datasets import Dataset
-import torch
 
-# Function to handle model loading
-def load_model(model_name):
+# Function to load and interact with model
+def interact_with_model(model_name, input_text):
+    # Load model and tokenizer
     model = AutoModelForCausalLM.from_pretrained(model_name)
     tokenizer = AutoTokenizer.from_pretrained(model_name)
-    return model, tokenizer
+    
+    # Tokenize input
+    inputs = tokenizer(input_text, return_tensors="pt")
+    
+    # Generate a response
+    outputs = model.generate(inputs["input_ids"], max_length=50, num_return_sequences=1)
+    response = tokenizer.decode(outputs[0], skip_special_tokens=True)
+    
+    return response
 
-# Function to train the model
-def train_model(model, tokenizer, data):
-    # Tokenize the data
-    inputs = tokenizer(data['input'], return_tensors='pt', padding=True, truncation=True)
-    labels = tokenizer(data['output'], return_tensors='pt', padding=True, truncation=True).input_ids
+# Gradio interface
+def create_gradio_interface():
+    model_names = ["microsoft/Phi-3-mini-4k-instruct", "gpt2"]  # Example models
     
-    # Move model to device
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    model.to(device)
-    
-    # Training loop (simplified)
-    model.train()
-    optimizer = torch.optim.Adam(model.parameters(), lr=1e-5)
-    for epoch in range(3):  # 3 epochs as an example
-        optimizer.zero_grad()
-        outputs = model(**inputs, labels=labels)
-        loss = outputs.loss
-        loss.backward()
-        optimizer.step()
-        print(f"Epoch {epoch}: Loss {loss.item()}")
-    
-    return model
+    # Gradio interface setup
+    interface = gr.Interface(
+        fn=interact_with_model,  # Function to call
+        inputs=[
+            gr.Dropdown(choices=model_names, label="Select Model"),  # Dropdown to select model
+            gr.Textbox(label="Enter Text", placeholder="Type something...")  # Text input for text
+        ],
+        outputs="text",  # Output text area
+        live=True  # Enable live updates
+    )
 
-# Streamlit Interface
-def main():
-    st.title("AI Model Training System")
-    
-    model_name = st.selectbox("Select Model", ["gpt2", "bert-base-uncased", "distilbert-base-uncased"])
-    
-    data_input = st.text_area("Enter Training Data (JSON Format)", '{"input": ["Hello"], "output": ["Hi"]}')
-    if st.button("Start Training"):
-        if data_input:
-            try:
-                # Parse the input data
-                data = eval(data_input)
-                dataset = Dataset.from_dict(data)
-                
-                # Load and train the model
-                model, tokenizer = load_model(model_name)
-                trained_model = train_model(model, tokenizer, dataset)
-                st.success("Model Training Completed Successfully!")
-            except Exception as e:
-                st.error(f"Error: {e}")
-        else:
-            st.warning("Please provide input data.")
+    # Launch the interface with a public URL
+    interface.launch(share=True)
 
+# Run the Gradio interface
 if __name__ == "__main__":
-    main()
+    create_gradio_interface()
